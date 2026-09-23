@@ -1,9 +1,9 @@
 # OpenAirCare (Rust + Makepad, Linux)
 
-Linux Rust program for AirPod hearing health functionality
+Linux Rust program for AirPod hearing health functionality!
 
-A small standalone app that configures the **Hearing Aid** feature of
-AirPods Pro 2 / AirPods Pro 3 from Linux (x86_64 or ARM):
+A small standalone app that configures the **Hearing Aid** features of
+AirPods Pro 2 / AirPods Pro 3 from a Linux computer (x86_64 or ARM):
 
 - enable / disable Hearing Aid (plus the listening-mode selector, because the
   feature only works in Transparency mode),
@@ -11,10 +11,9 @@ AirPods Pro 2 / AirPods Pro 3 from Linux (x86_64 or ARM):
 - adjust amplification, balance, tone, ambient noise reduction and
   conversation boost
 - "swipe to control amplification" toggle, reset.
-
-It speaks the same AACP / ATT protocol as the main LibrePods apps; see
-`crates/airpods-proto` for the byte layouts and the Linux `linux/README.md`
-"Hearing Aid" section for the original research.
+- amplification above 1.00 (Apple's own maximum) is held at 1.00 until you
+  confirm a warning: it is outside Apple's limits and could damage your
+  hearing and/or the AirPods.
 
 ## Layout
 

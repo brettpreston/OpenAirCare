@@ -68,6 +68,7 @@ script_mod! {
                 // Darker than the theme's default `color_bg_app` (a mid grey).
                 pass +: { clear_color: #141414 }
                 body +: {
+                    flow: Overlay
                     View{
                         width: Fill height: Fill
                         flow: Down
@@ -228,7 +229,8 @@ script_mod! {
 
                                 H3{text: "Adjustments"}
                                 adj_hint_label := Label{width: Fill text: ""}
-                                amp_slider := Slider{text: "Amplification  (1.00 = Apple's maximum; up to 2.00 works on the buds)" min: -1.0 max: 2.0 step: 0.01 precision: 2 default: 0.0}
+                                amp_slider := Slider{text: "Amplification  (1.00 = Apple's maximum; above that asks for confirmation)" min: -1.0 max: 2.0 step: 0.01 precision: 2 default: 0.0}
+                                amp_warn_label := Label{width: Fill text: "" draw_text +: {color: #FFB020FF}}
                                 bal_slider := Slider{text: "Balance  (left  <->  right)" min: -1.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
                                 tone_slider := Slider{text: "Tone  (darker  <->  brighter)" min: -1.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
                                 anr_slider := Slider{text: "Ambient noise reduction" min: 0.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
@@ -238,12 +240,49 @@ script_mod! {
                             }
                         }
                     }
+
+                    // Shown when the amplification slider is released above
+                    // Apple's maximum. Only the two buttons close it.
+                    amp_warn_modal := Modal{
+                        can_dismiss: false
+                        content +: {
+                            width: 460
+                            height: Fit
+                            RoundedView{
+                                width: Fill height: Fit
+                                show_bg: true
+                                draw_bg.color: #3A2A10
+                                draw_bg.border_color: #FFB020
+                                draw_bg.border_size: 1.0
+                                draw_bg.border_radius: 8.0
+                                padding: 22 spacing: 12
+                                flow: Down
+                                H3{text: "Warning: amplification above safe limits"}
+                                amp_warn_value_label := Label{width: Fill text: ""}
+                                Label{
+                                    width: Fill
+                                    text: "Apple's own Hearing Aid controls stop at 1.00. Values above that are outside the range Apple allows and beyond safe listening limits. Boosting this high could damage your hearing and/or the AirPods."
+                                }
+                                Label{width: Fill text: "Are you sure you want to boost above Apple's maximum?"}
+                                View{
+                                    width: Fill height: Fit
+                                    flow: Right spacing: 10 align: Align{x: 1.0 y: 0.5}
+                                    amp_boost_cancel_btn := Button{text: "No, keep at 1.00"}
+                                    amp_boost_confirm_btn := Button{text: "Yes, boost above 1.00"}
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     app
 }
+
+/// Apple's own UI stops here. Anything above is written to the buds only
+/// after the user confirms the warning dialog.
+const SAFE_AMP_MAX: f32 = 1.0;
 
 const MAX_LOG_LINES: usize = 14;
 
@@ -262,6 +301,15 @@ pub struct App {
     /// The user edited audiogram fields since the last device sync.
     #[rust]
     audiogram_dirty: bool,
+    /// The user confirmed the warning and may boost above [`SAFE_AMP_MAX`].
+    /// Re-armed once the amplification drops back to the safe range.
+    #[rust]
+    amp_boost_confirmed: bool,
+    /// The slider sits above [`SAFE_AMP_MAX`] without confirmation: the buds
+    /// are held at the safe value and the slider is not overwritten from the
+    /// device snapshot until the user answers the dialog.
+    #[rust]
+    amp_boost_pending: bool,
 }
 
 fn left_ids() -> [&'static [LiveId]; 8] {
@@ -345,11 +393,55 @@ impl App {
     }
 
     fn adjustments_to_ui(&mut self, cx: &mut Cx, a: &Adjustments) {
-        self.ui.slider(cx, ids!(amp_slider)).set_value(cx, a.amplification as f64);
+        if !self.amp_boost_pending {
+            self.ui.slider(cx, ids!(amp_slider)).set_value(cx, a.amplification as f64);
+        }
         self.ui.slider(cx, ids!(bal_slider)).set_value(cx, a.balance as f64);
         self.ui.slider(cx, ids!(tone_slider)).set_value(cx, a.tone as f64);
         self.ui.slider(cx, ids!(anr_slider)).set_value(cx, a.ambient_noise_reduction as f64);
         self.ui.check_box(cx, ids!(conv_check)).set_active(cx, a.conversation_boost, Animate::No);
+        self.update_amp_warning(cx);
+    }
+
+    fn amp_slider_value(&self, cx: &mut Cx) -> f32 {
+        self.ui.slider(cx, ids!(amp_slider)).value().unwrap_or(0.0) as f32
+    }
+
+    /// Inline warning under the amplification slider whenever it is above
+    /// Apple's maximum (pending or confirmed).
+    fn update_amp_warning(&mut self, cx: &mut Cx) {
+        let amp = self.amp_slider_value(cx);
+        let text = if amp <= SAFE_AMP_MAX {
+            String::new()
+        } else if self.amp_boost_pending {
+            format!(
+                "Warning: {amp:.2} is above Apple's maximum of {SAFE_AMP_MAX:.2}. The AirPods are held at {SAFE_AMP_MAX:.2} until you confirm.",
+            )
+        } else {
+            format!(
+                "Warning: {amp:.2} is above Apple's maximum of {SAFE_AMP_MAX:.2} and above safe listening limits. This could damage your hearing and/or the AirPods.",
+            )
+        };
+        self.ui.label(cx, ids!(amp_warn_label)).set_text(cx, &text);
+    }
+
+    /// Read the adjustments from the UI and write them to the buds, holding
+    /// the amplification at [`SAFE_AMP_MAX`] until a higher value is confirmed.
+    fn apply_adjustments_from_ui(&mut self, cx: &mut Cx) {
+        let mut adj = self.adjustments_from_ui(cx);
+        if adj.amplification > SAFE_AMP_MAX {
+            if !self.amp_boost_confirmed {
+                self.amp_boost_pending = true;
+                adj.amplification = SAFE_AMP_MAX;
+            }
+        } else {
+            // Back in the safe range: ask again the next time the user goes above it.
+            self.amp_boost_pending = false;
+            self.amp_boost_confirmed = false;
+        }
+        self.settings.adjustments = Some(adj);
+        self.send(Command::SetAdjustments(adj));
+        self.update_amp_warning(cx);
     }
 
     fn set_mode_radios(&mut self, cx: &mut Cx, mode: Option<ListeningMode>) {
@@ -642,11 +734,40 @@ impl MatchEvent for App {
             .any(|id| self.ui.slider(cx, *id).slided(actions).is_some());
         let conv_changed = self.ui.check_box(cx, ids!(conv_check)).changed(actions).is_some();
         if slid || conv_changed {
-            let adj = self.adjustments_from_ui(cx);
-            self.settings.adjustments = Some(adj);
-            self.send(Command::SetAdjustments(adj));
+            self.apply_adjustments_from_ui(cx);
+        }
+        // Ask once the drag (or typed value) is finished, not on every step.
+        if let Some(v) = self.ui.slider(cx, ids!(amp_slider)).end_slide(actions) {
+            if v as f32 > SAFE_AMP_MAX && !self.amp_boost_confirmed {
+                self.amp_boost_pending = true;
+                self.ui.label(cx, ids!(amp_warn_value_label)).set_text(
+                    cx,
+                    &format!("You are about to set amplification to {v:.2}. Apple's maximum is {SAFE_AMP_MAX:.2}."),
+                );
+                self.ui.modal(cx, ids!(amp_warn_modal)).open(cx);
+                self.ui.redraw(cx);
+            }
+        }
+        if self.ui.button(cx, ids!(amp_boost_confirm_btn)).clicked(actions) {
+            self.amp_boost_confirmed = true;
+            self.amp_boost_pending = false;
+            self.ui.modal(cx, ids!(amp_warn_modal)).close(cx);
+            let amp = self.amp_slider_value(cx);
+            self.push_log(cx, format!("amplification boosted to {amp:.2}, above Apple's maximum of {SAFE_AMP_MAX:.2} (user confirmed)"));
+            self.apply_adjustments_from_ui(cx);
+            self.ui.redraw(cx);
+        }
+        if self.ui.button(cx, ids!(amp_boost_cancel_btn)).clicked(actions) {
+            self.amp_boost_pending = false;
+            self.ui.modal(cx, ids!(amp_warn_modal)).close(cx);
+            self.ui.slider(cx, ids!(amp_slider)).set_value(cx, SAFE_AMP_MAX as f64);
+            self.apply_adjustments_from_ui(cx);
+            self.ui.redraw(cx);
         }
         if self.ui.button(cx, ids!(reset_btn)).clicked(actions) {
+            self.amp_boost_pending = false;
+            self.amp_boost_confirmed = false;
+            self.ui.modal(cx, ids!(amp_warn_modal)).close(cx);
             self.adjustments_to_ui(cx, &Adjustments::RESET);
             self.settings.adjustments = Some(Adjustments::RESET);
             self.settings.save();
