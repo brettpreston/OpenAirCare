@@ -14,7 +14,9 @@ AirPods Pro 2 / AirPods Pro 3 from a Linux computer (x86_64 or ARM):
 - amplification above 1.00 (Apple's own maximum) is held at 1.00 until you
   confirm a warning: it is outside Apple's limits and could damage your
   hearing and/or the AirPods.
-  
+
+# Screenshots
+
 <img width="600" height="820" alt="OAC1" src="https://github.com/user-attachments/assets/14560964-d3e1-40a0-b005-5d2ff4b49637" />
 <img width="600" height="820" alt="OAC2" src="https://github.com/user-attachments/assets/abf95a10-940b-4475-95f8-723de4a19429" />
 <img width="600" height="820" alt="OAC3" src="https://github.com/user-attachments/assets/8a376072-6454-43a0-a595-3a28d24724b8" />
