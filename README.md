@@ -45,8 +45,7 @@ hearing-aid-rs/
    listening mode, the Hearing Aid on/off switch) but the ATT channel on
    PSM 31 is refused (`Connection refused`), so audiogram/adjustments are
    unavailable and the Status page tells you so.
-4. Only one AACP client per host: quit the main LibrePods Linux app (or the
-   `hearing-aid-adjustments.py` script) while using this one.
+4. Only one AACP client per host: quit other programs that access the airpods when using this one.
 5. Build dependencies for Makepad (Ubuntu/Debian/Raspberry Pi OS):
 
    ```bash
