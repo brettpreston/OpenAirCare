@@ -329,7 +329,7 @@ impl Session {
                     Ok(other) => warn!("transparency read: {other:?}"),
                     Err(e) => self.log(format!("transparency read failed: {e}")),
                 }
-                if std::env::var_os("OPENAIRAID_ATT_SCAN").is_some() {
+                if std::env::var_os("OPENAIRCARE_ATT_SCAN").is_some() {
                     self.scan_handles().await;
                 }
                 self.publish();
@@ -585,7 +585,7 @@ impl Session {
         self.read_hearing_aid().await;
     }
 
-    /// Diagnostic (env `OPENAIRAID_ATT_SCAN`): read every handle 0x0001..=0x0060
+    /// Diagnostic (env `OPENAIRCARE_ATT_SCAN`): read every handle 0x0001..=0x0060
     /// and log the ones that answer, to find where a firmware keeps values
     /// we do not know about yet.
     async fn scan_handles(&mut self) {

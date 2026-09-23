@@ -1,6 +1,6 @@
 [package]
-name = "openairaid"
-description = "OpenAirAid: configure AirPods Pro hearing assistance from Linux"
+name = "openaircare"
+description = "OpenAirCare: configure AirPods Pro hearing assistance from Linux"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

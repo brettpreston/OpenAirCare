@@ -16,13 +16,13 @@ pub struct Settings {
 
 pub fn config_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        return PathBuf::from(dir).join("openairaid");
+        return PathBuf::from(dir).join("openaircare");
     }
     if let Some(dir) = std::env::var_os("APPDATA") {
-        return PathBuf::from(dir).join("openairaid");
+        return PathBuf::from(dir).join("openaircare");
     }
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    home.join(".config").join("openairaid")
+    home.join(".config").join("openaircare")
 }
 
 pub fn settings_path() -> PathBuf {

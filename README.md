@@ -1,4 +1,4 @@
-# OpenAirAid (Rust + Makepad, Linux)
+# OpenAirCare (Rust + Makepad, Linux)
 
 Linux Rust program for AirPod hearing health functionality
 
@@ -19,7 +19,7 @@ It speaks the same AACP / ATT protocol as the main LibrePods apps; see
 ## Layout
 
 ```
-hearing-aid-rs/
+openaircare/
   crates/airpods-proto   pure protocol (AACP framing, control commands, ATT PDUs,
                          104-byte hearing-aid codec) - no I/O, unit tested
   crates/airpods-link    BlueZ L2CAP transport (Linux) + session state machine,
@@ -64,10 +64,10 @@ Rust stable (see `rust-toolchain.toml`). Makepad is pulled from git at a
 pinned revision, so the first build takes a while.
 
 ```bash
-cd hearing-aid-rs
+cd openaircare
 cargo test --workspace --features airpods-link/mock   # protocol + session tests
-cargo run -p librepods-hearing-aid --release          # real BlueZ backend
-cargo run -p librepods-hearing-aid --features mock    # fake AirPods, no hardware
+cargo run -p openaircare --release          # real BlueZ backend
+cargo run -p openaircare --features mock    # fake AirPods, no hardware
 ```
 
 Environment knobs:
@@ -77,10 +77,10 @@ Environment knobs:
 | `RUST_LOG=debug` | log every AACP/ATT packet (hex) to stderr |
 | `MAKEPAD_GPU=gl` | force the OpenGL ES backend if Vulkan misbehaves |
 | `MAKEPAD=linux_direct` (build-time) | render straight to DRM/KMS without X11/Wayland (kiosk Pi) |
-| `LIBREPODS_ATT_SCAN=1` | "Reload from AirPods" also reads ATT handles 0x0001-0x0060 and logs them (find where a firmware keeps a value; diff two runs) |
+| `OPENAIRCARE_ATT_SCAN=1` | "Reload from AirPods" also reads ATT handles 0x0001-0x0060 and logs them (find where a firmware keeps a value; diff two runs) |
 
 Settings (last audiogram / adjustments) are stored in
-`$XDG_CONFIG_HOME/librepods-hearing-aid/` (defaults to `~/.config/...`).
+`$XDG_CONFIG_HOME/openaircare/` (defaults to `~/.config/...`).
 
 ## Raspberry Pi 5
 

@@ -1,4 +1,4 @@
-//! OpenAirAid: a Makepad desktop UI over `airpods-link`.
+//! OpenAirCare: a Makepad desktop UI over `airpods-link`.
 //!
 //! UI -> session: `SessionHandle::send(Command)`.
 //! Session -> UI: the session thread posts `SessionEvent`s with
@@ -63,7 +63,7 @@ script_mod! {
     let app = startup() do #(App::script_component(vm)){
         ui: Root{
             main_window := Window{
-                window.title: "OpenAirAid"
+                window.title: "OpenAirCare"
                 window.inner_size: vec2(600, 820)
                 // Darker than the theme's default `color_bg_app` (a mid grey).
                 pass +: { clear_color: #141414 }
