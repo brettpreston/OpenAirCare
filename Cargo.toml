@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/airpods-proto",
+    "crates/airpods-link",
+    "app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+repository = ""
+
+[workspace.dependencies]
+airpods-proto = { path = "crates/airpods-proto" }
+airpods-link = { path = "crates/airpods-link" }
+log = "0.4"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["rt-multi-thread", "sync", "time", "macros", "io-util"] }
+thiserror = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

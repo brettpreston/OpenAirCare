@@ -1,0 +1,21 @@
+[package]
+name = "openairaid"
+description = "OpenAirAid: configure AirPods Pro hearing assistance from Linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# Run against the in-memory fake AirPods instead of BlueZ.
+mock = ["airpods-link/mock"]
+
+[dependencies]
+airpods-proto = { workspace = true }
+airpods-link = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+env_logger = "0.11"
+makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "152b11f20a8cf8e81bfd0086210cb9b0269c51e9" }

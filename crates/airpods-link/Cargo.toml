@@ -1,0 +1,26 @@
+[package]
+name = "airpods-link"
+description = "BlueZ L2CAP transport and session state machine for AirPods hearing-aid control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# In-memory fake AirPods so the UI can run without hardware (any OS).
+mock = []
+
+[dependencies]
+airpods-proto = { workspace = true }
+log = { workspace = true }
+hex = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+bluer = { version = "0.17.4", default-features = false, features = ["bluetoothd", "l2cap"] }
+uuid = "1"
