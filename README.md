@@ -6,8 +6,7 @@ profiles.
 > [!WARNING]
 > **Medical and safety disclaimer.** This software is an uncertified,
 > experimental research utility for Linux hardware interoperability. It is
-> **NOT** a medical device, is **NOT** approved by any regulatory health agency
-> (including the FDA or Health Canada), and must **NOT** be used as a
+> **NOT** a medical device, is **NOT** approved by any regulatory health agency, and must **NOT** be used as a
 > replacement for a prescribed hearing aid. The developers accept no liability
 > for hearing damage or device malfunction.
 >
