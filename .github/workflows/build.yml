@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: linux-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 (glibc 2.35) so the binaries also run on Debian/Raspberry Pi OS Bookworm (glibc 2.36).
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config clang libssl-dev \
+            libx11-dev libxcursor-dev libxkbcommon-dev libxrandr-dev libxi-dev libxinerama-dev \
+            libasound2-dev libpulse-dev libwayland-dev wayland-protocols \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libglx-dev libdrm-dev libgbm-dev \
+            libdbus-1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.arch }}
+
+      - name: Test
+        run: cargo test --workspace --features airpods-link/mock
+
+      - name: Build release
+        run: cargo build -p openaircare --release --locked
+
+      - name: Package
+        run: |
+          name=openaircare-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}-linux-${{ matrix.arch }}
+          mkdir "$name"
+          cp target/release/openaircare README.md "$name/"
+          tar czf "$name.tar.gz" "$name"
+          echo "PKG=$name.tar.gz" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openaircare-linux-${{ matrix.arch }}
+          path: ${{ env.PKG }}
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tar.gz"
+          generate_release_notes: true
