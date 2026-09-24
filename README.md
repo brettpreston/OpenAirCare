@@ -56,6 +56,13 @@ AirPods and AirPods Pro are registered trademarks of Apple Inc. This project
 is independent and not affiliated with, endorsed by, or sponsored by Apple
 Inc. Other product names are used only to describe hardware compatibility.
 
+# Screenshots
+
+<img width="600" height="820" alt="OAC1" src="https://github.com/user-attachments/assets/14560964-d3e1-40a0-b005-5d2ff4b49637" />
+<img width="600" height="820" alt="OAC2" src="https://github.com/user-attachments/assets/abf95a10-940b-4475-95f8-723de4a19429" />
+<img width="600" height="820" alt="OAC3" src="https://github.com/user-attachments/assets/8a376072-6454-43a0-a595-3a28d24724b8" />
+<img width="600" height="820" alt="OAC4" src="https://github.com/user-attachments/assets/ca2d5973-111f-472f-80e5-23b01a19b936" />
+
 ## Layout
 
 ```
@@ -178,4 +185,4 @@ about 5 minutes on a Pi 5 (8 GB); the debug build of makepad about 10.
   MAC field on the Status page to force a specific one.
 
 ## Shoutout
-  Librepods - check out their repo https://github.com/librepods-org/librepods
+Librepods - check out their repo https://github.com/librepods-org/librepods
