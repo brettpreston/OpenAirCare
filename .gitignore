@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+/screenshots/
 
 # Editor / OS
 .vscode/

@@ -1,26 +1,67 @@
 # OpenAirCare (Rust + Makepad, Linux)
 
-Linux Rust program for AirPod hearing health functionality!
+A Linux BlueZ configuration utility for Apple AirPods Pro audio transparency
+profiles.
 
-A small standalone app that configures the **Hearing Aid** features of
-AirPods Pro 2 / AirPods Pro 3 from a Linux computer (x86_64 or ARM):
+> [!WARNING]
+> **Medical and safety disclaimer.** This software is an uncertified,
+> experimental research utility for Linux hardware interoperability. It is
+> **NOT** a medical device, is **NOT** approved by any regulatory health agency
+> (including the FDA or Health Canada), and must **NOT** be used as a
+> replacement for a prescribed hearing aid. The developers accept no liability
+> for hearing damage or device malfunction.
+>
+> If you have, or suspect, hearing loss, see a qualified hearing-care
+> professional. Stop using the software and remove the AirPods immediately if
+> you notice discomfort, ringing, or unexpectedly loud output.
 
-- enable / disable Hearing Aid (plus the listening-mode selector, because the
-  feature only works in Transparency mode),
-- enter your **audiogram** (8 bands per ear, dB HL) or load it from JSON,
+OpenAirCare is a small standalone app for hardware-interoperability research:
+it lets a Linux computer (x86_64 or ARM) read and write the transparency-mode
+audio profile settings that AirPods Pro 2 / AirPods Pro 3 already expose over
+Bluetooth. It adds no audio processing of its own; it only relays settings to
+the earbuds' firmware.
+
+- toggle the earbuds' built-in transparency audio profile — shown in the app
+  as **Hearing Health** (Apple labels this setting "Hearing Aid") — plus the
+  listening-mode selector, because the profile only applies in Transparency
+  mode,
+- edit the 8-band-per-ear profile curve (dB HL values) or load it from JSON,
 - adjust amplification, balance, tone, ambient noise reduction and
-  conversation boost
+  conversation boost,
 - "swipe to control amplification" toggle, reset.
-- amplification above 1.00 (Apple's own maximum) is held at 1.00 until you
-  confirm a warning: it is outside Apple's limits and could damage your
-  hearing and/or the AirPods.
+
+## Safety limits
+
+- On first launch the app shows the medical/safety disclaimer above and stays
+  disconnected from the earbuds until you acknowledge that you have read and
+  accept it.
+- Hard ceilings are enforced in `crates/airpods-proto` at the encoder — the
+  last stop before the radio — so no code path can send larger values to the
+  earbuds: **amplification** (including own-voice and per-ear after balance)
+  is clamped to `-1.0..=1.5`, every **profile-curve band** to
+  `0..=120 dB HL`, balance and tone to `-1.0..=1.0` and ambient noise
+  reduction to `0.0..=1.0`. Non-finite values (NaN/inf from hand-edited
+  JSON) become 0.
+- In the UI, amplification above **1.00** (Apple's own maximum) is held at
+  1.00 until you confirm a warning: values above that are outside Apple's
+  limits and could damage your hearing and/or the AirPods. The UI rejects
+  dB HL entries outside 0–120 instead of silently clamping them.
+
+Start with low values, change one setting at a time, and never raise
+amplification while the earbuds are at a loud listening volume.
+
+## Trademarks
+
+AirPods and AirPods Pro are registered trademarks of Apple Inc. This project
+is independent and not affiliated with, endorsed by, or sponsored by Apple
+Inc. Other product names are used only to describe hardware compatibility.
 
 ## Layout
 
 ```
 openaircare/
   crates/airpods-proto   pure protocol (AACP framing, control commands, ATT PDUs,
-                         104-byte hearing-aid codec) - no I/O, unit tested
+                         104-byte Hearing Health codec) - no I/O, unit tested
   crates/airpods-link    BlueZ L2CAP transport (Linux) + session state machine,
                          plus a `mock` fake-AirPods for development on any OS
   app/                   the Makepad UI
@@ -31,7 +72,7 @@ openaircare/
 1. **BlueZ** with `bluetoothd` running (any modern distro / Raspberry Pi OS).
 2. Your AirPods paired and **connected** as an audio device the normal way
    (`bluetoothctl connect XX:XX:...` or the desktop Bluetooth settings).
-3. **Vendor-ID spoofing.** AirPods only expose the hearing-aid channel to
+3. **Vendor-ID spoofing.** AirPods only expose the Hearing Health channel to
    hosts that identify as Apple. Add to `/etc/bluetooth/main.conf` under
    `[General]`:
 
@@ -41,7 +82,7 @@ openaircare/
 
    then `sudo systemctl restart bluetooth` and **re-pair** the AirPods (they
    cache the host's Device ID). Without this the app still connects (battery,
-   listening mode, the Hearing Aid on/off switch) but the ATT channel on
+   listening mode, the Hearing Health on/off switch) but the ATT channel on
    PSM 31 is refused (`Connection refused`), so audiogram/adjustments are
    unavailable and the Status page tells you so.
 4. Only one AACP client per host: quit other programs that manage the airpods when using this one.
@@ -107,11 +148,11 @@ about 5 minutes on a Pi 5 (8 GB); the debug build of makepad about 10.
   (a never-configured AirPods Pro 3 reads back `02 00 60 00`). The app forces
   `02 xx 64 00`; "Reload from AirPods" on the Audiogram tab reads the blob
   back so you can verify what the buds actually stored. Adjustments are only
-  audible while Hearing Aid is on, in Transparency mode, with the buds in
+  audible while Hearing Health is on, in Transparency mode, with the buds in
   your ears. Verified on AirPods Pro 3: a stem swipe changes exactly the
   amplification fields the sliders write (offsets 36 / 84), and a value
   written by the app is applied immediately.
-- **The Hearing Aid switch does not "confirm"** - AirPods Pro 3 on firmware
+- **The Hearing Health switch does not "confirm"** - AirPods Pro 3 on firmware
   8A apply `0x2C`/`0x33` but never echo them (older firmware does). The app
   therefore shows the value it sent; the buds report the real, persisted
   state in their initial dump on the next connect (Disconnect / Connect on
@@ -137,4 +178,4 @@ about 5 minutes on a Pi 5 (8 GB); the debug build of makepad about 10.
   MAC field on the Status page to force a specific one.
 
 ## Shoutout
-Librepods - check out their repo https://github.com/librepods-org/librepods
+  Librepods - check out their repo https://github.com/librepods-org/librepods

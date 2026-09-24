@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use airpods_link::session::{Command, ConnectionState, SessionEvent, SessionHandle, Snapshot};
 use airpods_link::Transport;
-use airpods_proto::hearing::{Adjustments, Audiogram, BANDS_HZ};
+use airpods_proto::hearing::{Adjustments, Audiogram, BANDS_HZ, DB_HL_MAX, DB_HL_MIN};
 use airpods_proto::model;
 use airpods_proto::ListeningMode;
 use makepad_widgets::*;
@@ -80,7 +80,7 @@ script_mod! {
                             flow: Right
                             spacing: theme.space_2
                             tab_status := RadioButtonTab{text: "Status"}
-                            tab_hearing := RadioButtonTab{text: "Hearing Aid"}
+                            tab_hearing := RadioButtonTab{text: "Hearing Health"}
                             tab_audiogram := RadioButtonTab{text: "Audiogram"}
                             tab_adjust := RadioButtonTab{text: "Adjustments"}
                         }
@@ -120,7 +120,7 @@ script_mod! {
 
                                 Hr{}
                                 H3{text: "Listening mode"}
-                                Label{width: Fill text: "Hearing Aid only works in Transparency mode."}
+                                Label{width: Fill text: "Hearing Health only works in Transparency mode."}
                                 modes := View{
                                     width: Fit height: Fit
                                     flow: Right
@@ -136,21 +136,21 @@ script_mod! {
                                 log_label := Label{width: Fill text: ""}
                             }
 
-                            // ---------------------------------------------------- Hearing aid
+                            // ---------------------------------------------------- Hearing health
                             page_hearing := ScrollYView{
                                 width: Fill height: Fill
                                 flow: Down
                                 spacing: 10
 
-                                H3{text: "Hearing Aid"}
+                                H3{text: "Hearing Health"}
                                 capability_label := Label{width: Fill text: "Connect your AirPods first."}
-                                ha_toggle := Toggle{text: "Hearing Aid enabled"}
+                                ha_toggle := Toggle{text: "Hearing Health enabled"}
                                 swipe_toggle := Toggle{text: "Swipe the stem to adjust amplification"}
                                 Hr{}
                                 att_label := Label{width: Fill text: ""}
                                 Label{
                                     width: Fill
-                                    text: "Enabling Hearing Aid turns off Customized Transparency and Headphone Accommodation on the AirPods. Use the Audiogram tab to load your hearing test results, then fine tune on the Adjustments tab."
+                                    text: "Enabling Hearing Health turns off Customized Transparency and Headphone Accommodation on the AirPods. Use the Audiogram tab to load your hearing test results, then fine tune on the Adjustments tab."
                                 }
                             }
 
@@ -161,7 +161,7 @@ script_mod! {
                                 spacing: 8
 
                                 H3{text: "Audiogram (hearing loss in dB HL)"}
-                                Label{width: Fill text: "Enter the values from a professional hearing test. 0 = no loss. AirPods use bands 250 Hz to 8 kHz."}
+                                Label{width: Fill text: "Enter the values from a professional hearing test. 0 = no loss, 120 = maximum. AirPods use bands 250 Hz to 8 kHz."}
                                 View{
                                     width: Fill height: Fit flow: Right spacing: 8
                                     Label{width: 80 text: "Band"}
@@ -229,13 +229,13 @@ script_mod! {
 
                                 H3{text: "Adjustments"}
                                 adj_hint_label := Label{width: Fill text: ""}
-                                amp_slider := Slider{text: "Amplification  (1.00 = Apple's maximum; above that asks for confirmation)" min: -1.0 max: 2.0 step: 0.01 precision: 2 default: 0.0}
+                                amp_slider := Slider{text: "Amplification  (1.00 = Apple's maximum; above that asks for confirmation, hard limit 1.50)" min: -1.0 max: 1.5 step: 0.01 precision: 2 default: 0.0}
                                 amp_warn_label := Label{width: Fill text: "" draw_text +: {color: #FFB020FF}}
                                 bal_slider := Slider{text: "Balance  (left  <->  right)" min: -1.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
                                 tone_slider := Slider{text: "Tone  (darker  <->  brighter)" min: -1.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
                                 anr_slider := Slider{text: "Ambient noise reduction" min: 0.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
                                 conv_check := CheckBox{text: "Conversation boost"}
-                                own_voice_label := Label{width: Fill text: ""}
+                                own_voice_slider := Slider{text: "Own voice amplification  (how loud you hear yourself)" min: 0.0 max: 1.0 step: 0.01 precision: 2 default: 0.0}
                                 reset_btn := Button{text: "Reset adjustments"}
                             }
                         }
@@ -261,7 +261,7 @@ script_mod! {
                                 amp_warn_value_label := Label{width: Fill text: ""}
                                 Label{
                                     width: Fill
-                                    text: "Apple's own Hearing Aid controls stop at 1.00. Values above that are outside the range Apple allows and beyond safe listening limits. Boosting this high could damage your hearing and/or the AirPods."
+                                    text: "Apple's own controls stop at 1.00. Values above that are outside the range Apple allows and beyond safe listening limits. Boosting this high could damage your hearing and/or the AirPods."
                                 }
                                 Label{width: Fill text: "Are you sure you want to boost above Apple's maximum?"}
                                 View{
@@ -269,6 +269,47 @@ script_mod! {
                                     flow: Right spacing: 10 align: Align{x: 1.0 y: 0.5}
                                     amp_boost_cancel_btn := Button{text: "No, keep at 1.00"}
                                     amp_boost_confirm_btn := Button{text: "Yes, boost above 1.00"}
+                                }
+                            }
+                        }
+                    }
+
+                    // First-launch disclaimer. Opened at startup until the
+                    // user has acknowledged it once; only the two buttons
+                    // close it, and the session stays disconnected until
+                    // the user accepts.
+                    disclaimer_modal := Modal{
+                        can_dismiss: false
+                        content +: {
+                            width: 520
+                            height: Fit
+                            RoundedView{
+                                width: Fill height: Fit
+                                show_bg: true
+                                draw_bg.color: #3A1010
+                                draw_bg.border_color: #FF5050
+                                draw_bg.border_size: 1.0
+                                draw_bg.border_radius: 8.0
+                                padding: 22 spacing: 12
+                                flow: Down
+                                H3{text: "Read before first use"}
+                                Label{
+                                    width: Fill
+                                    text: "This software is an uncertified, experimental research utility for Linux hardware interoperability. It is NOT a medical device, is NOT approved by any regulatory health agency (including the FDA or Health Canada), and must NOT be used as a replacement for a prescribed hearing aid. The developers accept no liability for hearing damage or device malfunction."
+                                }
+                                Label{
+                                    width: Fill
+                                    text: "If you have, or suspect, hearing loss, see a qualified hearing-care professional. Stop and remove the AirPods immediately if you notice discomfort, ringing, or unexpectedly loud output."
+                                }
+                                Label{
+                                    width: Fill
+                                    text: "AirPods and AirPods Pro are registered trademarks of Apple Inc. This project is independent and not affiliated with, endorsed by, or sponsored by Apple Inc."
+                                }
+                                View{
+                                    width: Fill height: Fit
+                                    flow: Right spacing: 10 align: Align{x: 1.0 y: 0.5}
+                                    disclaimer_decline_btn := Button{text: "Quit"}
+                                    disclaimer_accept_btn := Button{text: "I have read the above and accept"}
                                 }
                             }
                         }
@@ -515,34 +556,34 @@ impl App {
 
         self.set_mode_radios(cx, snap.listening_mode);
 
-        // Hearing aid page
+        // Hearing health page
         let capability_text = match (connected, snap.hearing_aid_capable, &snap.info) {
             (false, _, _) => "Connect your AirPods first (Status tab).".to_string(),
-            (true, Some(true), Some(i)) => format!("{} ({}) supports Hearing Aid.", model::family_name(&i.model_number), i.model_number),
-            (true, Some(false), Some(i)) => format!("{} ({}) does not support Hearing Aid (AirPods Pro 2 / Pro 3 only).", i.name, i.model_number),
+            (true, Some(true), Some(i)) => format!("{} ({}) supports Hearing Health.", model::family_name(&i.model_number), i.model_number),
+            (true, Some(false), Some(i)) => format!("{} ({}) does not support Hearing Health (AirPods Pro 2 / Pro 3 only).", i.name, i.model_number),
             (true, _, _) => "Waiting for device information...".to_string(),
         };
         self.ui.label(cx, ids!(capability_label)).set_text(cx, &capability_text);
         self.ui.check_box(cx, ids!(ha_toggle)).set_active(cx, snap.hearing_aid_enabled.unwrap_or(false), Animate::No);
         self.ui.check_box(cx, ids!(swipe_toggle)).set_active(cx, snap.gain_swipe.unwrap_or(false), Animate::No);
         let ha_text = match (&snap.hearing_aid_enabled, snap.hearing_aid_enrolled) {
-            (Some(true), _) => "Hearing Aid is ON.",
-            (Some(false), true) => "Hearing Aid is off (audiogram enrolled).",
-            (Some(false), false) => "Hearing Aid is off.",
-            (None, _) => "Hearing Aid state unknown yet.",
+            (Some(true), _) => "Hearing Health is ON.",
+            (Some(false), true) => "Hearing Health is off (audiogram enrolled).",
+            (Some(false), false) => "Hearing Health is off.",
+            (None, _) => "Hearing Health state unknown yet.",
         };
-        self.ui.check_box(cx, ids!(ha_toggle)).set_text(&format!("Hearing Aid enabled - {ha_text}"));
+        self.ui.check_box(cx, ids!(ha_toggle)).set_text(&format!("Hearing Health enabled - {ha_text}"));
 
         let att_text = if !connected {
             String::new()
         } else if snap.att_ok {
             match snap.data {
-                Some(_) => "Hearing-aid settings channel (ATT) open; audiogram and adjustments are live.".to_string(),
-                None => "ATT channel open, waiting for hearing-aid data...".to_string(),
+                Some(_) => "Hearing Health settings channel (ATT) open; audiogram and adjustments are live.".to_string(),
+                None => "ATT channel open, waiting for Hearing Health data...".to_string(),
             }
         } else {
             format!(
-                "Hearing-aid settings channel unavailable: {}\n\nChecklist: add `DeviceID = bluetooth:004C:0000:0000` to /etc/bluetooth/main.conf, restart bluetooth, re-pair the AirPods, and make sure no other Pods app is running.",
+                "Hearing Health settings channel unavailable: {}\n\nChecklist: add `DeviceID = bluetooth:004C:0000:0000` to /etc/bluetooth/main.conf, restart bluetooth, re-pair the AirPods, and make sure no other Pods app is running.",
                 snap.att_error.clone().unwrap_or_default()
             )
         };
@@ -552,11 +593,11 @@ impl App {
             .map(|d| d.left.eq.iter().chain(d.right.eq.iter()).all(|v| v.abs() < 0.5))
             .unwrap_or(false);
         let adj_hint = if !(snap.att_ok && snap.data.is_some()) {
-            "Not available until the hearing-aid settings channel is open (see Hearing Aid tab)."
+            "Not available until the Hearing Health settings channel is open (see Hearing Health tab)."
         } else if audiogram_is_flat_zero {
             "The audiogram on the AirPods is all zeros (no hearing loss), so amplification has nothing to amplify: enter your audiogram first (Audiogram tab). Changes are written as you move the sliders."
         } else if snap.hearing_aid_enabled != Some(true) {
-            "Changes are written as you move the sliders, but you will only hear them once Hearing Aid is on (Hearing Aid tab) and the buds are in Transparency mode."
+            "Changes are written as you move the sliders, but you will only hear them once Hearing Health is on (Hearing Health tab) and the buds are in Transparency mode."
         } else {
             "Changes are written to the AirPods as you move the sliders."
         };
@@ -564,9 +605,7 @@ impl App {
 
         if let Some(d) = snap.data {
             self.adjustments_to_ui(cx, &d.adjustments());
-            self.ui
-                .label(cx, ids!(own_voice_label))
-                .set_text(cx, &format!("Own voice amplification (device): {:.2}", d.own_voice_amplification));
+            self.ui.slider(cx, ids!(own_voice_slider)).set_value(cx, d.own_voice_amplification as f64);
             if !self.audiogram_dirty {
                 self.audiogram_to_ui(cx, &d.audiogram());
             }
@@ -582,7 +621,13 @@ fn parse_db(s: &str) -> Result<f32, String> {
     if t.is_empty() {
         return Ok(0.0);
     }
-    t.parse::<f32>().map_err(|_| format!("'{t}' is not a number"))
+    let v = t.parse::<f32>().map_err(|_| format!("'{t}' is not a number"))?;
+    // The proto layer clamps again on encode; rejecting here tells the user
+    // instead of silently sending a different value.
+    if !v.is_finite() || !(DB_HL_MIN..=DB_HL_MAX).contains(&v) {
+        return Err(format!("'{t}' is outside {DB_HL_MIN:.0}-{DB_HL_MAX:.0} dB HL"));
+    }
+    Ok(v)
 }
 
 fn format_db(v: f32) -> String {
@@ -611,7 +656,13 @@ impl MatchEvent for App {
         if let Some(auto) = self.settings.auto_reconnect {
             handle.send(Command::SetAutoReconnect(auto));
         }
-        handle.send(Command::Connect(self.settings.device_mac.clone()));
+        // First launch: nothing talks to the buds until the disclaimer is
+        // acknowledged. The modal cannot be dismissed and covers the UI.
+        if self.settings.disclaimer_accepted == Some(true) {
+            handle.send(Command::Connect(self.settings.device_mac.clone()));
+        } else {
+            self.ui.modal(cx, ids!(disclaimer_modal)).open(cx);
+        }
         self.session = Some(handle);
         self.push_log(cx, "started".into());
     }
@@ -635,6 +686,20 @@ impl MatchEvent for App {
         }
         if got_snapshot {
             self.sync_ui(cx);
+        }
+
+        // ---- first-launch disclaimer ----
+        if self.ui.button(cx, ids!(disclaimer_accept_btn)).clicked(actions) {
+            self.settings.disclaimer_accepted = Some(true);
+            self.settings.save();
+            self.ui.modal(cx, ids!(disclaimer_modal)).close(cx);
+            self.push_log(cx, "disclaimer acknowledged".into());
+            self.send(Command::Connect(self.settings.device_mac.clone()));
+            self.ui.redraw(cx);
+        }
+        if self.ui.button(cx, ids!(disclaimer_decline_btn)).clicked(actions) {
+            // Not accepted: nothing was written to the buds or to disk.
+            std::process::exit(0);
         }
 
         // ---- tabs ----
@@ -674,7 +739,7 @@ impl MatchEvent for App {
             self.send(Command::SetListeningMode(ListeningMode::ALL[i]));
         }
 
-        // ---- hearing aid page ----
+        // ---- hearing health page ----
         if let Some(on) = self.ui.check_box(cx, ids!(ha_toggle)).changed(actions) {
             self.send(Command::SetHearingAid(on));
         }
@@ -735,6 +800,9 @@ impl MatchEvent for App {
         let conv_changed = self.ui.check_box(cx, ids!(conv_check)).changed(actions).is_some();
         if slid || conv_changed {
             self.apply_adjustments_from_ui(cx);
+        }
+        if let Some(v) = self.ui.slider(cx, ids!(own_voice_slider)).slided(actions) {
+            self.send(Command::SetOwnVoice(v as f32));
         }
         // Ask once the drag (or typed value) is finished, not on every step.
         if let Some(v) = self.ui.slider(cx, ids!(amp_slider)).end_slide(actions) {

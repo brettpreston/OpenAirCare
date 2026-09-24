@@ -84,6 +84,9 @@ pub enum Command {
     SetGainSwipe(bool),
     SetAdjustments(Adjustments),
     SetAudiogram(Audiogram),
+    /// Set own-voice amplification (blob offset 100). Clamped to the safety
+    /// ceilings by the encoder like every other gain field.
+    SetOwnVoice(f32),
     ResetAdjustments,
     /// Re-read the hearing-aid characteristic.
     Reload,
@@ -293,6 +296,14 @@ impl Session {
             Command::SetAudiogram(ag) => {
                 if let Some(mut d) = self.pending.or(self.snap.data) {
                     ag.apply_to(&mut d);
+                    self.queue_write(d);
+                } else {
+                    self.log("no hearing-aid data loaded yet");
+                }
+            }
+            Command::SetOwnVoice(v) => {
+                if let Some(mut d) = self.pending.or(self.snap.data) {
+                    d.own_voice_amplification = v;
                     self.queue_write(d);
                 } else {
                     self.log("no hearing-aid data loaded yet");

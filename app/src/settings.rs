@@ -12,6 +12,9 @@ pub struct Settings {
     pub adjustments: Option<Adjustments>,
     pub device_mac: Option<String>,
     pub auto_reconnect: Option<bool>,
+    /// The user acknowledged the first-launch medical/safety disclaimer.
+    /// `None`/`Some(false)`: the app shows the modal and stays disconnected.
+    pub disclaimer_accepted: Option<bool>,
 }
 
 pub fn config_dir() -> PathBuf {

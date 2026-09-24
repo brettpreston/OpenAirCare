@@ -38,12 +38,21 @@ pub const WRITE_MARKER: u8 = 0x64;
 /// Verified on firmware 8A by writing and reading back.
 pub const PROFILE_MARKER: u8 = 0x02;
 
-/// Amplification range accepted by [`Adjustments::apply_to`]. Apple's UI
-/// stops at 1.0, but the buds store and apply larger values (verified on
-/// AirPods Pro 3: 1.5 is audibly louder than 1.0), and the transparency
-/// blob documents the field as 0..2. Kept symmetric below at -1.
+/// Hard amplification ceiling. Apple's UI stops at 1.0; the buds store and
+/// apply larger values (verified on AirPods Pro 3: 1.5 is audibly louder
+/// than 1.0). The blob documents the field as 0..2, but this crate refuses
+/// to encode anything above 1.5 as a safety margin: [`EarParams::encode`]
+/// clamps, so no code path can send a larger value to the buds.
+/// Kept symmetric below at -1.
 pub const AMP_MIN: f32 = -1.0;
-pub const AMP_MAX: f32 = 2.0;
+pub const AMP_MAX: f32 = 1.5;
+
+/// Audiogram bounds (dB HL). 0 = no measured loss; 120 is the ceiling of a
+/// clinical audiogram chart. [`Audiogram::apply_to`] and
+/// [`EarParams::encode`] clamp every band into this range, so no code path
+/// can send an out-of-range value to the buds.
+pub const DB_HL_MIN: f32 = 0.0;
+pub const DB_HL_MAX: f32 = 120.0;
 
 /// Audiogram band centre frequencies (Hz), in blob order.
 pub const BANDS_HZ: [u16; 8] = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
@@ -72,6 +81,26 @@ fn get_f32(buf: &[u8], off: usize) -> f32 {
 
 fn put_f32(buf: &mut [u8], off: usize, v: f32) {
     buf[off..off + 4].copy_from_slice(&v.to_le_bytes());
+}
+
+/// Clamp an audiogram band to [`DB_HL_MIN`]`..=`[`DB_HL_MAX`]; a non-finite
+/// value (NaN/inf from hand-edited JSON) becomes 0 (no loss).
+fn clamp_db_hl(v: f32) -> f32 {
+    if v.is_finite() {
+        v.clamp(DB_HL_MIN, DB_HL_MAX)
+    } else {
+        0.0
+    }
+}
+
+/// Clamp amplification to [`AMP_MIN`]`..=`[`AMP_MAX`]; a non-finite value
+/// becomes 0 (no gain).
+fn clamp_amp(v: f32) -> f32 {
+    if v.is_finite() {
+        v.clamp(AMP_MIN, AMP_MAX)
+    } else {
+        0.0
+    }
 }
 
 /// Per-ear parameters.
@@ -112,11 +141,15 @@ impl EarParams {
         }
     }
 
+    /// Encode into the blob. This is the last stop before the radio, so the
+    /// safety ceilings are enforced here regardless of what the caller set:
+    /// every band is clamped to `0..=120` dB HL and amplification to
+    /// [`AMP_MIN`]`..=`[`AMP_MAX`].
     fn encode(&self, buf: &mut [u8], eq_off: usize, amp: usize, tone: usize, conv: usize, anr: usize) {
         for (i, e) in self.eq.iter().enumerate() {
-            put_f32(buf, eq_off + i * 4, *e);
+            put_f32(buf, eq_off + i * 4, clamp_db_hl(*e));
         }
-        put_f32(buf, amp, self.amplification);
+        put_f32(buf, amp, clamp_amp(self.amplification));
         put_f32(buf, tone, self.tone);
         put_f32(buf, conv, if self.conversation_boost { 1.0 } else { 0.0 });
         put_f32(buf, anr, self.ambient_noise_reduction);
@@ -154,7 +187,7 @@ impl HearingAidData {
         buf[2] = WRITE_MARKER;
         self.left.encode(buf, OFF_LEFT_EQ, OFF_LEFT_AMP, OFF_LEFT_TONE, OFF_LEFT_CONV, OFF_LEFT_ANR);
         self.right.encode(buf, OFF_RIGHT_EQ, OFF_RIGHT_AMP, OFF_RIGHT_TONE, OFF_RIGHT_CONV, OFF_RIGHT_ANR);
-        put_f32(buf, OFF_OWN_VOICE, self.own_voice_amplification);
+        put_f32(buf, OFF_OWN_VOICE, clamp_amp(self.own_voice_amplification));
         Ok(())
     }
 
@@ -184,9 +217,12 @@ pub struct Audiogram {
 }
 
 impl Audiogram {
+    /// Write the audiogram into the device model, clamping every band to
+    /// [`DB_HL_MIN`]`..=`[`DB_HL_MAX`] (values may come from hand-edited
+    /// JSON).
     pub fn apply_to(&self, data: &mut HearingAidData) {
-        data.left.eq = self.left;
-        data.right.eq = self.right;
+        data.left.eq = self.left.map(clamp_db_hl);
+        data.right.eq = self.right.map(clamp_db_hl);
     }
 }
 
@@ -390,16 +426,46 @@ mod tests {
     }
 
     #[test]
-    fn extended_amplification_survives() {
+    fn extended_amplification_survives_up_to_the_ceiling() {
         let mut d = HearingAidData::default();
         Adjustments { amplification: 1.5, balance: 0.0, ..Adjustments::RESET }.apply_to(&mut d);
         assert_eq!(d.left.amplification, 1.5);
         assert_eq!(d.right.amplification, 1.5);
         assert_eq!(Adjustments::from_data(&d).amplification, 1.5);
-        // balance on top of an extended value is capped per ear
+        // anything above the ceiling is held at AMP_MAX, balance included
         Adjustments { amplification: 1.8, balance: 0.5, ..Adjustments::RESET }.apply_to(&mut d);
-        assert_eq!(d.left.amplification, 1.8);
+        assert_eq!(d.left.amplification, AMP_MAX);
         assert_eq!(d.right.amplification, AMP_MAX);
+    }
+
+    #[test]
+    fn encode_enforces_the_safety_ceilings() {
+        // Even bypassing Adjustments/Audiogram and poking the model directly,
+        // the bytes on the wire stay inside the hard limits.
+        let mut d = HearingAidData::default();
+        d.left.amplification = 9.0;
+        d.right.amplification = f32::NAN;
+        d.own_voice_amplification = -7.0;
+        d.left.eq[0] = 500.0;
+        d.left.eq[1] = -30.0;
+        d.right.eq[7] = f32::INFINITY;
+        let buf = d.encode_fresh();
+        let back = HearingAidData::decode(&buf).unwrap();
+        assert_eq!(back.left.amplification, AMP_MAX);
+        assert_eq!(back.right.amplification, 0.0);
+        assert_eq!(back.own_voice_amplification, AMP_MIN);
+        assert_eq!(back.left.eq[0], DB_HL_MAX);
+        assert_eq!(back.left.eq[1], DB_HL_MIN);
+        assert_eq!(back.right.eq[7], 0.0);
+    }
+
+    #[test]
+    fn audiogram_apply_clamps_bands() {
+        let a = Audiogram { left: [500.0; 8], right: [-10.0; 8] };
+        let mut d = HearingAidData::default();
+        a.apply_to(&mut d);
+        assert_eq!(d.left.eq, [DB_HL_MAX; 8]);
+        assert_eq!(d.right.eq, [DB_HL_MIN; 8]);
     }
 
     #[test]
