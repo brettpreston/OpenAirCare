@@ -58,10 +58,10 @@ Inc. Other product names are used only to describe hardware compatibility.
 
 # Screenshots
 
-<img width="600" height="820" alt="OAC1" src="https://github.com/user-attachments/assets/14560964-d3e1-40a0-b005-5d2ff4b49637" />
-<img width="600" height="820" alt="OAC2" src="https://github.com/user-attachments/assets/abf95a10-940b-4475-95f8-723de4a19429" />
-<img width="600" height="820" alt="OAC3" src="https://github.com/user-attachments/assets/8a376072-6454-43a0-a595-3a28d24724b8" />
-<img width="600" height="820" alt="OAC4" src="https://github.com/user-attachments/assets/ca2d5973-111f-472f-80e5-23b01a19b936" />
+<img width="600" height="820" alt="Status tab" src="screenshots/status.png" />
+<img width="600" height="820" alt="Hearing Health tab" src="screenshots/hearing-health.png" />
+<img width="600" height="820" alt="Audiogram tab" src="screenshots/audiogram.png" />
+<img width="600" height="820" alt="Adjustments tab" src="screenshots/adjustments.png" />
 
 ## Layout
 
