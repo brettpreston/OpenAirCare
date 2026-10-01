@@ -15,6 +15,9 @@ pub struct Settings {
     /// The user acknowledged the first-launch medical/safety disclaimer.
     /// `None`/`Some(false)`: the app shows the modal and stays disconnected.
     pub disclaimer_accepted: Option<bool>,
+    /// Hearing Test tab: user correction (dB) on top of the estimated
+    /// dB HL -> dBFS reference table in `tone.rs`.
+    pub hearing_test_offset_db: Option<f32>,
 }
 
 pub fn config_dir() -> PathBuf {

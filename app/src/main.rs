@@ -6,7 +6,9 @@
 
 pub use makepad_widgets;
 
+mod hearing_test;
 mod settings;
+mod tone;
 
 use std::sync::Arc;
 
@@ -17,7 +19,9 @@ use airpods_proto::model;
 use airpods_proto::ListeningMode;
 use makepad_widgets::*;
 
+use crate::hearing_test::{Presentation, TestRunner};
 use crate::settings::Settings;
+use crate::tone::{db_hl_to_amp, Ear, ToneShared, BURST_SECS};
 
 app_main!(App);
 
@@ -81,6 +85,7 @@ script_mod! {
                             spacing: theme.space_2
                             tab_status := RadioButtonTab{text: "Status"}
                             tab_hearing := RadioButtonTab{text: "Hearing Health"}
+                            tab_test := RadioButtonTab{text: "Hearing Test"}
                             tab_audiogram := RadioButtonTab{text: "Audiogram"}
                             tab_adjust := RadioButtonTab{text: "Adjustments"}
                         }
@@ -152,6 +157,40 @@ script_mod! {
                                     width: Fill
                                     text: "Enabling Hearing Health turns off Customized Transparency and Headphone Accommodation on the AirPods. Use the Audiogram tab to load your hearing test results, then fine tune on the Adjustments tab."
                                 }
+                            }
+
+                            // ---------------------------------------------------- Hearing test
+                            page_test := ScrollYView{
+                                width: Fill height: Fill
+                                flow: Down
+                                spacing: 10
+
+                                H3{text: "Hearing Test (pure-tone screening)"}
+                                Label{
+                                    width: Fill
+                                    text: "Plays short beeps at the 8 audiogram bands, one ear at a time, and finds the quietest level you respond to. This is a screening aid, not a clinical test: tone levels are estimated, not calibrated. The results fill the Audiogram tab for you to review before applying."
+                                }
+                                Label{
+                                    width: Fill
+                                    text: "Before you start: sit somewhere quiet, wear both AirPods, set the system volume to 100 %, and make sure the AirPods are the audio output. Remove the AirPods at once if anything is uncomfortably loud."
+                                }
+                                ht_device_label := Label{width: Fill text: "Audio output: waiting for the device list..."}
+                                ht_buds_label := Label{width: Fill text: ""}
+                                ht_offset_slider := Slider{text: "Level offset (dB)  - the sample tone should be clearly audible but not loud; adjust if it is not" min: -20.0 max: 20.0 step: 1.0 precision: 0 default: 0.0}
+                                View{
+                                    width: Fill height: Fit flow: Right spacing: 8
+                                    ht_sample_btn := Button{text: "Play sample tone (1 kHz, 40 dB HL)"}
+                                    ht_start_btn := Button{text: "Start test"}
+                                    ht_stop_btn := Button{text: "Stop"}
+                                }
+                                Hr{}
+                                ht_progress_label := Label{width: Fill text: ""}
+                                ht_state_label := Label{width: Fill text: "Not running."}
+                                ht_heard_btn := Button{width: Fill height: 90 text: "I heard it   (or press Space)"}
+                                ht_false_label := Label{width: Fill text: "" draw_text +: {color: #FFB020FF}}
+                                Hr{}
+                                ht_results_label := Label{width: Fill text: ""}
+                                ht_use_btn := Button{text: "Use in Audiogram tab"}
                             }
 
                             // ---------------------------------------------------- Audiogram
@@ -274,6 +313,41 @@ script_mod! {
                         }
                     }
 
+
+                    // Shown when the user presses Start on the Hearing Test tab.
+                    ht_warn_modal := Modal{
+                        can_dismiss: false
+                        content +: {
+                            width: 460
+                            height: Fit
+                            RoundedView{
+                                width: Fill height: Fit
+                                show_bg: true
+                                draw_bg.color: #3A2A10
+                                draw_bg.border_color: #FFB020
+                                draw_bg.border_size: 1.0
+                                draw_bg.border_radius: 8.0
+                                padding: 22 spacing: 12
+                                flow: Down
+                                H3{text: "Before the hearing test"}
+                                Label{
+                                    width: Fill
+                                    text: "Tones start at a moderate level and get louder only when you do not respond, up to a fixed cap. The levels are estimated from typical AirPods Pro output and are not calibrated, so the result is a screening aid, not a diagnosis."
+                                }
+                                Label{
+                                    width: Fill
+                                    text: "Remove the AirPods immediately if any tone is uncomfortably loud, and see a hearing-care professional for a real audiogram."
+                                }
+                                View{
+                                    width: Fill height: Fit
+                                    flow: Right spacing: 10 align: Align{x: 1.0 y: 0.5}
+                                    ht_warn_cancel_btn := Button{text: "Cancel"}
+                                    ht_warn_start_btn := Button{text: "Start test"}
+                                }
+                            }
+                        }
+                    }
+
                     // First-launch disclaimer. Opened at startup until the
                     // user has acknowledged it once; only the two buttons
                     // close it, and the session stays disconnected until
@@ -327,6 +401,28 @@ const SAFE_AMP_MAX: f32 = 1.0;
 
 const MAX_LOG_LINES: usize = 14;
 
+/// Hearing test timing (seconds). The silence before a burst is random in
+/// `PRE_DELAY_MIN..PRE_DELAY_MIN + PRE_DELAY_SPREAD` so the user cannot
+/// anticipate it; a response is accepted during the burst and for
+/// `RESPONSE_WINDOW` after it.
+const PRE_DELAY_MIN: f64 = 1.0;
+const PRE_DELAY_SPREAD: f64 = 1.5;
+const RESPONSE_WINDOW: f64 = 1.5;
+/// Presses during the silence before a tone; above this the user is warned.
+const FALSE_PRESS_WARN: u32 = 5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum TestPhase {
+    #[default]
+    Idle,
+    /// Silence before the burst.
+    PreDelay,
+    /// The burst is playing.
+    Playing,
+    /// Burst over, still accepting a response.
+    Window,
+}
+
 #[derive(Script, ScriptHook)]
 pub struct App {
     #[live]
@@ -351,6 +447,28 @@ pub struct App {
     /// device snapshot until the user answers the dialog.
     #[rust]
     amp_boost_pending: bool,
+    /// Handle to the tone generator on the audio thread.
+    #[rust]
+    tone: ToneShared,
+    /// Hearing test in progress, if any.
+    #[rust]
+    test: Option<TestRunner>,
+    #[rust]
+    test_phase: TestPhase,
+    #[rust]
+    test_timer: Timer,
+    /// Presses while no tone was playing, this run.
+    #[rust]
+    false_presses: u32,
+    /// Finished run waiting to be copied into the Audiogram tab.
+    #[rust]
+    test_result: Option<(Audiogram, Vec<String>)>,
+    /// Listening mode and Hearing Health state to put back after the test.
+    #[rust]
+    restore_after_test: Option<(Option<ListeningMode>, Option<bool>)>,
+    /// xorshift state for the pre-tone delay (no `rand` dependency).
+    #[rust]
+    rng: u64,
 }
 
 fn left_ids() -> [&'static [LiveId]; 8] {
@@ -485,6 +603,198 @@ impl App {
         self.update_amp_warning(cx);
     }
 
+    // ---- hearing test ----
+
+    fn rand_unit(&mut self) -> f64 {
+        if self.rng == 0 {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0x9E37_79B9_7F4A_7C15);
+            self.rng = nanos | 1;
+        }
+        let mut x = self.rng;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.rng = x;
+        (x >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    fn test_offset_db(&self, cx: &mut Cx) -> f32 {
+        self.ui.slider(cx, ids!(ht_offset_slider)).value().unwrap_or(0.0) as f32
+    }
+
+    fn test_running(&self) -> bool {
+        self.test.is_some()
+    }
+
+    fn begin_test(&mut self, cx: &mut Cx) {
+        if self.test_running() {
+            return;
+        }
+        // Isolate the tones: ANC on, Hearing Health off, restored afterwards.
+        if let Some(snap) = &self.snap {
+            if matches!(snap.state, ConnectionState::Connected) {
+                self.restore_after_test = Some((snap.listening_mode, snap.hearing_aid_enabled));
+                self.send(Command::SetListeningMode(ListeningMode::NoiseCancellation));
+                if snap.hearing_aid_enabled == Some(true) {
+                    self.send(Command::SetHearingAid(false));
+                }
+            }
+        }
+        self.test = Some(TestRunner::new());
+        self.false_presses = 0;
+        self.test_result = None;
+        self.ui.label(cx, ids!(ht_results_label)).set_text(cx, "");
+        self.push_log(cx, "hearing test started".into());
+        self.next_trial(cx);
+    }
+
+    /// Schedule the next presentation (or finish). Also restarts the
+    /// current one after a false press.
+    fn next_trial(&mut self, cx: &mut Cx) {
+        cx.stop_timer(self.test_timer);
+        let done = self.test.as_ref().map(|t| t.is_done()).unwrap_or(true);
+        if done {
+            self.finish_test(cx);
+            return;
+        }
+        self.test_phase = TestPhase::PreDelay;
+        let delay = PRE_DELAY_MIN + PRE_DELAY_SPREAD * self.rand_unit();
+        self.test_timer = cx.start_timeout(delay);
+        self.update_test_ui(cx);
+    }
+
+    fn current_presentation(&self) -> Option<Presentation> {
+        self.test.as_ref().and_then(|t| t.current())
+    }
+
+    fn on_test_timer(&mut self, cx: &mut Cx) {
+        match self.test_phase {
+            TestPhase::Idle => {}
+            TestPhase::PreDelay => {
+                let Some(p) = self.current_presentation() else {
+                    self.finish_test(cx);
+                    return;
+                };
+                let amp = db_hl_to_amp(p.band, p.db_hl, self.test_offset_db(cx));
+                self.tone.play(p.freq_hz(), amp, p.ear);
+                self.test_phase = TestPhase::Playing;
+                self.test_timer = cx.start_timeout(BURST_SECS as f64);
+            }
+            TestPhase::Playing => {
+                self.tone.stop();
+                self.test_phase = TestPhase::Window;
+                self.test_timer = cx.start_timeout(RESPONSE_WINDOW);
+            }
+            TestPhase::Window => {
+                if let Some(t) = &mut self.test {
+                    t.respond(false);
+                }
+                self.next_trial(cx);
+            }
+        }
+    }
+
+    fn heard_pressed(&mut self, cx: &mut Cx) {
+        match self.test_phase {
+            TestPhase::Idle => {}
+            TestPhase::PreDelay => {
+                // Nothing was playing: count it and re-randomise the delay.
+                self.false_presses += 1;
+                self.next_trial(cx);
+            }
+            TestPhase::Playing | TestPhase::Window => {
+                self.tone.stop();
+                if let Some(t) = &mut self.test {
+                    t.respond(true);
+                }
+                self.next_trial(cx);
+            }
+        }
+    }
+
+    fn finish_test(&mut self, cx: &mut Cx) {
+        let res = self.test.as_ref().and_then(|t| t.result());
+        self.end_test(cx);
+        if let Some((ag, notes)) = &res {
+            let mut text = String::from("Result (dB HL, approximate)\n");
+            for (i, hz) in BANDS_HZ.iter().enumerate() {
+                text.push_str(&format!("{hz:>5} Hz    L {:>3}    R {:>3}\n", format_db(ag.left[i]), format_db(ag.right[i])));
+            }
+            if self.false_presses > 0 {
+                text.push_str(&format!("\n{} press(es) while no tone was playing.", self.false_presses));
+            }
+            for n in notes {
+                text.push_str("\n");
+                text.push_str(n);
+            }
+            self.ui.label(cx, ids!(ht_results_label)).set_text(cx, &text);
+            self.push_log(cx, "hearing test finished".into());
+        }
+        self.test_result = res;
+        self.update_test_ui(cx);
+    }
+
+    /// Stop everything and put the buds back; used by Stop, finish, an
+    /// audio-device loss and shutdown.
+    fn end_test(&mut self, cx: &mut Cx) {
+        self.tone.stop();
+        cx.stop_timer(self.test_timer);
+        self.test_timer = Timer::default();
+        self.test_phase = TestPhase::Idle;
+        self.test = None;
+        if let Some((mode, ha)) = self.restore_after_test.take() {
+            if let Some(m) = mode {
+                self.send(Command::SetListeningMode(m));
+            }
+            if ha == Some(true) {
+                self.send(Command::SetHearingAid(true));
+            }
+            self.push_log(cx, "hearing test: restored listening mode / Hearing Health".into());
+        }
+        self.update_test_ui(cx);
+    }
+
+    fn update_test_ui(&mut self, cx: &mut Cx) {
+        let running = self.test_running();
+        let progress = match self.current_presentation() {
+            Some(p) => {
+                let (done, total) = self.test.as_ref().map(|t| t.progress()).unwrap_or((0, 0));
+                let ear = if p.ear == Ear::Left { "Left" } else { "Right" };
+                format!("{ear} ear  -  {} Hz  -  band {} of {total}", p.freq_hz() as u32, done + 1)
+            }
+            None => String::new(),
+        };
+        self.ui.label(cx, ids!(ht_progress_label)).set_text(cx, &progress);
+        // The same text through every phase, so it gives no cue that a tone
+        // has started.
+        let state = if running {
+            "Press the button (or Space) as soon as you hear the beeps."
+        } else if self.test_result.is_some() {
+            "Test complete. Review the result below, then use it in the Audiogram tab."
+        } else {
+            "Not running."
+        };
+        self.ui.label(cx, ids!(ht_state_label)).set_text(cx, state);
+        let false_text = if running && self.false_presses > FALSE_PRESS_WARN {
+            format!(
+                "{} presses while nothing was playing. Wait for the beeps; pressing early makes the result unreliable.",
+                self.false_presses
+            )
+        } else {
+            String::new()
+        };
+        self.ui.label(cx, ids!(ht_false_label)).set_text(cx, &false_text);
+        self.ui.button(cx, ids!(ht_heard_btn)).set_enabled(cx, running);
+        self.ui.button(cx, ids!(ht_stop_btn)).set_enabled(cx, running);
+        self.ui.button(cx, ids!(ht_start_btn)).set_enabled(cx, !running);
+        self.ui.button(cx, ids!(ht_sample_btn)).set_enabled(cx, !running);
+        self.ui.button(cx, ids!(ht_use_btn)).set_enabled(cx, self.test_result.is_some());
+        self.ui.redraw(cx);
+    }
+
     fn set_mode_radios(&mut self, cx: &mut Cx, mode: Option<ListeningMode>) {
         let ids: [(&[LiveId], ListeningMode); 4] = [
             (ids!(mode_off), ListeningMode::Off),
@@ -603,6 +913,13 @@ impl App {
         };
         self.ui.label(cx, ids!(adj_hint_label)).set_text(cx, adj_hint);
 
+        let buds_text = if connected {
+            "During the test the AirPods are switched to Noise Cancellation and Hearing Health is turned off, so the existing profile does not colour the tones. Both are restored when the test ends."
+        } else {
+            "AirPods not connected: the test still plays through the current audio output, but nothing is switched on the buds."
+        };
+        self.ui.label(cx, ids!(ht_buds_label)).set_text(cx, buds_text);
+
         if let Some(d) = snap.data {
             self.adjustments_to_ui(cx, &d.adjustments());
             self.ui.slider(cx, ids!(own_voice_slider)).set_value(cx, d.own_voice_amplification as f64);
@@ -650,6 +967,11 @@ impl MatchEvent for App {
         if let Some(ag) = &self.settings.audiogram.clone() {
             self.audiogram_to_ui(cx, ag);
         }
+        if let Some(off) = self.settings.hearing_test_offset_db {
+            self.ui.slider(cx, ids!(ht_offset_slider)).set_value(cx, off as f64);
+        }
+        tone::install(cx, self.tone.clone());
+        self.update_test_ui(cx);
 
         let emit: airpods_link::session::Emit = Arc::new(|e: SessionEvent| Cx::post_action(e));
         let handle = airpods_link::session::spawn(make_transport(), emit);
@@ -665,6 +987,37 @@ impl MatchEvent for App {
         }
         self.session = Some(handle);
         self.push_log(cx, "started".into());
+    }
+
+    fn handle_audio_devices(&mut self, cx: &mut Cx, e: &AudioDevicesEvent) {
+        // Prefer the AirPods' A2DP sink; `match_outputs` falls back to the
+        // default output when no name matches.
+        let ids = e.match_outputs(&["AirPods", "airpods", "AirPod"]);
+        let chosen = e.descs.iter().find(|d| Some(&d.device_id) == ids.first());
+        let text = match chosen {
+            Some(d) if d.name.to_ascii_lowercase().contains("airpod") => format!("Audio output: {}", d.name),
+            Some(d) => format!("Audio output: {} (not the AirPods: select them as the Bluetooth audio sink first)", d.name),
+            None => "Audio output: none available".to_string(),
+        };
+        self.ui.label(cx, ids!(ht_device_label)).set_text(cx, &text);
+        cx.use_audio_outputs(&ids);
+        if ids.is_empty() && self.test_running() {
+            self.end_test(cx);
+            self.push_log(cx, "hearing test stopped: audio output lost".into());
+        }
+        self.ui.redraw(cx);
+    }
+
+    fn handle_timer(&mut self, cx: &mut Cx, e: &TimerEvent) {
+        if self.test_timer.is_timer(e).is_some() {
+            self.on_test_timer(cx);
+        }
+    }
+
+    fn handle_key_down(&mut self, cx: &mut Cx, e: &KeyEvent) {
+        if e.key_code == KeyCode::Space && !e.is_repeat && self.test_running() {
+            self.heard_pressed(cx);
+        }
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
@@ -705,10 +1058,10 @@ impl MatchEvent for App {
         // ---- tabs ----
         if let Some(i) = self
             .ui
-            .radio_button_set(cx, ids_list!(tab_status, tab_hearing, tab_audiogram, tab_adjust))
+            .radio_button_set(cx, ids_list!(tab_status, tab_hearing, tab_test, tab_audiogram, tab_adjust))
             .selected(cx, actions)
         {
-            let page = [live_id!(page_status), live_id!(page_hearing), live_id!(page_audiogram), live_id!(page_adjust)][i];
+            let page = [live_id!(page_status), live_id!(page_hearing), live_id!(page_test), live_id!(page_audiogram), live_id!(page_adjust)][i];
             self.ui.page_flip(cx, ids!(pages)).set_active_page(cx, page);
             self.ui.redraw(cx);
         }
@@ -793,6 +1146,52 @@ impl MatchEvent for App {
             }
         }
 
+        // ---- hearing test page ----
+        if let Some(v) = self.ui.slider(cx, ids!(ht_offset_slider)).end_slide(actions) {
+            self.settings.hearing_test_offset_db = Some(v as f32);
+            self.settings.save();
+        }
+        if self.ui.button(cx, ids!(ht_sample_btn)).clicked(actions) && !self.test_running() {
+            let amp = db_hl_to_amp(2, 40.0, self.test_offset_db(cx));
+            self.tone.play(1000.0, amp, Ear::Both);
+        }
+        if self.ui.button(cx, ids!(ht_start_btn)).clicked(actions) && !self.test_running() {
+            self.ui.modal(cx, ids!(ht_warn_modal)).open(cx);
+            self.ui.redraw(cx);
+        }
+        if self.ui.button(cx, ids!(ht_warn_cancel_btn)).clicked(actions) {
+            self.ui.modal(cx, ids!(ht_warn_modal)).close(cx);
+            self.ui.redraw(cx);
+        }
+        if self.ui.button(cx, ids!(ht_warn_start_btn)).clicked(actions) {
+            self.ui.modal(cx, ids!(ht_warn_modal)).close(cx);
+            self.begin_test(cx);
+        }
+        if self.ui.button(cx, ids!(ht_stop_btn)).clicked(actions) && self.test_running() {
+            self.end_test(cx);
+            self.push_log(cx, "hearing test stopped".into());
+        }
+        if self.ui.button(cx, ids!(ht_heard_btn)).clicked(actions) {
+            self.heard_pressed(cx);
+        }
+        if self.ui.button(cx, ids!(ht_use_btn)).clicked(actions) {
+            if let Some((ag, _)) = self.test_result.clone() {
+                self.audiogram_to_ui(cx, &ag);
+                // Keep the fields until the user applies them; the next
+                // device snapshot must not overwrite them.
+                self.audiogram_dirty = true;
+                self.ui
+                    .label(cx, ids!(ag_status_label))
+                    .set_text(cx, "Filled from the hearing test (approximate). Review, then press Apply to AirPods.");
+                // `set_active` does not deselect the sibling tabs.
+                for id in [ids!(tab_status), ids!(tab_hearing), ids!(tab_test), ids!(tab_audiogram), ids!(tab_adjust)] {
+                    self.ui.radio_button(cx, id).set_active(cx, id == ids!(tab_audiogram), Animate::No);
+                }
+                self.ui.page_flip(cx, ids!(pages)).set_active_page(cx, live_id!(page_audiogram));
+                self.ui.redraw(cx);
+            }
+        }
+
         // ---- adjustments page ----
         let slid = [ids!(amp_slider), ids!(bal_slider), ids!(tone_slider), ids!(anr_slider)]
             .iter()
@@ -852,6 +1251,8 @@ impl AppMain for App {
 
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
         if let Event::Shutdown = event {
+            // Best effort: put the buds back if a test was running.
+            self.end_test(cx);
             self.settings.save();
         }
         self.match_event(cx, event);

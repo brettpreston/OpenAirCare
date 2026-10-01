@@ -25,9 +25,36 @@ the earbuds' firmware.
   listening-mode selector, because the profile only applies in Transparency
   mode,
 - edit the 8-band-per-ear profile curve (dB HL values) or load it from JSON,
+- run a pure-tone **Hearing Test** (Apple-style beeps, one ear at a time) that
+  fills the audiogram for you to review (see below),
 - adjust amplification, balance, tone, ambient noise reduction and
   conversation boost,
 - "swipe to control amplification" toggle, reset.
+
+## Hearing Test tab
+
+The Hearing Test tab plays three short beeps at each audiogram band (250 Hz
+to 8 kHz), left ear then right, and steps the level up and down (modified
+Hughson-Westlake) until it finds the quietest level you respond to. Press
+the big button or Space when you hear the beeps. The result fills the
+Audiogram tab, marked as unsaved, so you can review it and press *Apply*.
+
+It is a screening aid, not a clinical test:
+
+- A Linux host has no calibrated path to the earbuds. The app converts dB HL
+  to a digital level with an *estimated* table for AirPods Pro at **100 %
+  system volume**; set the volume to 100 % before starting, and use the
+  *Level offset* slider if the 40 dB HL sample tone is clearly loud or barely
+  audible. Levels below roughly 10 dB HL sit near the Bluetooth codec's noise
+  floor and are not reliable.
+- The AirPods must be the system's audio output (the A2DP sink). The tab
+  shows which output device will be used.
+- While connected, the app switches the earbuds to Noise Cancellation and
+  turns Hearing Health off for the duration of the test, and restores both
+  afterwards.
+- Tones start at 40 dB HL, never exceed 80 dB HL, and the rendered level is
+  hard-capped at about -6 dBFS whatever the offset. Remove the earbuds at once
+  if anything is uncomfortably loud.
 
 ## Safety limits
 
