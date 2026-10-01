@@ -177,20 +177,60 @@ script_mod! {
                                 ht_device_label := Label{width: Fill text: "Audio output: waiting for the device list..."}
                                 ht_buds_label := Label{width: Fill text: ""}
                                 ht_offset_slider := Slider{text: "Level offset (dB)  - the sample tone should be clearly audible but not loud; adjust if it is not" min: -20.0 max: 20.0 step: 1.0 precision: 0 default: 0.0}
-                                View{
-                                    width: Fill height: Fit flow: Right spacing: 8
-                                    ht_sample_btn := Button{text: "Play sample tone (1 kHz, 40 dB HL)"}
-                                    ht_start_btn := Button{text: "Start test"}
-                                    ht_stop_btn := Button{text: "Stop"}
+                                ht_manual_toggle := Toggle{text: "Manual mode: set each tone's level yourself"}
+                                ht_auto_view := View{
+                                    width: Fill height: Fit flow: Down spacing: 10
+                                    View{
+                                        width: Fill height: Fit flow: Right spacing: 8
+                                        ht_sample_btn := Button{text: "Play sample tone (1 kHz, 40 dB HL)"}
+                                        ht_start_btn := Button{text: "Start test"}
+                                        ht_stop_btn := Button{text: "Stop"}
+                                    }
+                                    Hr{}
+                                    ht_progress_label := Label{width: Fill text: ""}
+                                    ht_state_label := Label{width: Fill text: "Not running."}
+                                    ht_heard_btn := Button{width: Fill height: 90 text: "I heard it   (or press Space)"}
+                                    ht_false_label := Label{width: Fill text: "" draw_text +: {color: #FFB020FF}}
+                                    Hr{}
+                                    ht_results_label := Label{width: Fill text: ""}
+                                    ht_use_btn := Button{text: "Use in Audiogram tab"}
                                 }
-                                Hr{}
-                                ht_progress_label := Label{width: Fill text: ""}
-                                ht_state_label := Label{width: Fill text: "Not running."}
-                                ht_heard_btn := Button{width: Fill height: 90 text: "I heard it   (or press Space)"}
-                                ht_false_label := Label{width: Fill text: "" draw_text +: {color: #FFB020FF}}
-                                Hr{}
-                                ht_results_label := Label{width: Fill text: ""}
-                                ht_use_btn := Button{text: "Use in Audiogram tab"}
+                                ht_manual_view := View{
+                                    visible: false
+                                    width: Fill height: Fit flow: Down spacing: 10
+                                    Label{
+                                        width: Fill
+                                        text: "Drag a slider from the left: that band's beeps play in that ear while you hold it, and get louder as you move right. Leave each slider where the beeps are only just audible. Levels are estimated, not calibrated, and are capped like the automatic test. Remove the AirPods at once if anything is uncomfortably loud."
+                                    }
+                                    View{
+                                        width: Fill height: Fit flow: Right spacing: 10
+                                        View{
+                                            width: Fill height: Fit flow: Down spacing: 4
+                                            H3{text: "Left ear"}
+                                            ht_m_l_0 := Slider{width: Fill text: "250 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_1 := Slider{width: Fill text: "500 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_2 := Slider{width: Fill text: "1000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_3 := Slider{width: Fill text: "2000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_4 := Slider{width: Fill text: "3000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_5 := Slider{width: Fill text: "4000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_6 := Slider{width: Fill text: "6000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_l_7 := Slider{width: Fill text: "8000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                        }
+                                        View{
+                                            width: Fill height: Fit flow: Down spacing: 4
+                                            H3{text: "Right ear"}
+                                            ht_m_r_0 := Slider{width: Fill text: "250 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_1 := Slider{width: Fill text: "500 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_2 := Slider{width: Fill text: "1000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_3 := Slider{width: Fill text: "2000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_4 := Slider{width: Fill text: "3000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_5 := Slider{width: Fill text: "4000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_6 := Slider{width: Fill text: "6000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                            ht_m_r_7 := Slider{width: Fill text: "8000 Hz" min: -10.0 max: 80.0 step: 5.0 precision: 0 default: 0.0}
+                                        }
+                                    }
+                                    ht_manual_use_btn := Button{text: "Use in Audiogram tab"}
+                                }
                             }
 
                             // ---------------------------------------------------- Audiogram
@@ -463,9 +503,16 @@ pub struct App {
     /// Finished run waiting to be copied into the Audiogram tab.
     #[rust]
     test_result: Option<(Audiogram, Vec<String>)>,
-    /// Listening mode and Hearing Health state to put back after the test.
+    /// Listening mode and Hearing Health state to put back when the
+    /// automatic test or manual mode ends.
     #[rust]
-    restore_after_test: Option<(Option<ListeningMode>, Option<bool>)>,
+    buds_restore: Option<(Option<ListeningMode>, Option<bool>)>,
+    /// The manual (slider) sub-page is shown instead of the automatic test.
+    #[rust]
+    manual_mode: bool,
+    /// Manual-mode slider currently held down, so its tone is playing.
+    #[rust]
+    manual_playing: Option<(Ear, usize)>,
     /// xorshift state for the pre-tone delay (no `rand` dependency).
     #[rust]
     rng: u64,
@@ -482,6 +529,21 @@ fn right_ids() -> [&'static [LiveId]; 8] {
     [
         ids!(ag_r_0), ids!(ag_r_1), ids!(ag_r_2), ids!(ag_r_3),
         ids!(ag_r_4), ids!(ag_r_5), ids!(ag_r_6), ids!(ag_r_7),
+    ]
+}
+
+/// Manual-mode sliders, one per audiogram band.
+fn manual_left_ids() -> [&'static [LiveId]; 8] {
+    [
+        ids!(ht_m_l_0), ids!(ht_m_l_1), ids!(ht_m_l_2), ids!(ht_m_l_3),
+        ids!(ht_m_l_4), ids!(ht_m_l_5), ids!(ht_m_l_6), ids!(ht_m_l_7),
+    ]
+}
+
+fn manual_right_ids() -> [&'static [LiveId]; 8] {
+    [
+        ids!(ht_m_r_0), ids!(ht_m_r_1), ids!(ht_m_r_2), ids!(ht_m_r_3),
+        ids!(ht_m_r_4), ids!(ht_m_r_5), ids!(ht_m_r_6), ids!(ht_m_r_7),
     ]
 }
 
@@ -629,20 +691,41 @@ impl App {
         self.test.is_some()
     }
 
-    fn begin_test(&mut self, cx: &mut Cx) {
-        if self.test_running() {
+    /// Isolate the tones: ANC on, Hearing Health off. The previous state is
+    /// kept for `restore_buds`; a second call while isolated is a no-op so
+    /// the isolated state is never mistaken for the original.
+    fn isolate_buds(&mut self) {
+        if self.buds_restore.is_some() {
             return;
         }
-        // Isolate the tones: ANC on, Hearing Health off, restored afterwards.
         if let Some(snap) = &self.snap {
             if matches!(snap.state, ConnectionState::Connected) {
-                self.restore_after_test = Some((snap.listening_mode, snap.hearing_aid_enabled));
+                self.buds_restore = Some((snap.listening_mode, snap.hearing_aid_enabled));
                 self.send(Command::SetListeningMode(ListeningMode::NoiseCancellation));
                 if snap.hearing_aid_enabled == Some(true) {
                     self.send(Command::SetHearingAid(false));
                 }
             }
         }
+    }
+
+    fn restore_buds(&mut self, cx: &mut Cx) {
+        if let Some((mode, ha)) = self.buds_restore.take() {
+            if let Some(m) = mode {
+                self.send(Command::SetListeningMode(m));
+            }
+            if ha == Some(true) {
+                self.send(Command::SetHearingAid(true));
+            }
+            self.push_log(cx, "hearing test: restored listening mode / Hearing Health".into());
+        }
+    }
+
+    fn begin_test(&mut self, cx: &mut Cx) {
+        if self.test_running() || self.manual_mode {
+            return;
+        }
+        self.isolate_buds();
         self.test = Some(TestRunner::new());
         self.false_presses = 0;
         self.test_result = None;
@@ -745,16 +828,94 @@ impl App {
         self.test_timer = Timer::default();
         self.test_phase = TestPhase::Idle;
         self.test = None;
-        if let Some((mode, ha)) = self.restore_after_test.take() {
-            if let Some(m) = mode {
-                self.send(Command::SetListeningMode(m));
-            }
-            if ha == Some(true) {
-                self.send(Command::SetHearingAid(true));
-            }
-            self.push_log(cx, "hearing test: restored listening mode / Hearing Health".into());
-        }
+        self.manual_playing = None;
+        self.restore_buds(cx);
         self.update_test_ui(cx);
+    }
+
+    /// Show or hide the manual (slider) sub-page. The buds are isolated
+    /// while it is shown, like during the automatic test.
+    fn set_manual_mode(&mut self, cx: &mut Cx, on: bool) {
+        if on && self.test_running() {
+            // A disabled CheckBox still takes the click, so revert it.
+            self.ui.check_box(cx, ids!(ht_manual_toggle)).set_active(cx, false, Animate::No);
+            self.push_log(cx, "stop the running test before switching to manual mode".into());
+            self.ui.redraw(cx);
+            return;
+        }
+        self.tone.stop();
+        self.manual_playing = None;
+        self.manual_mode = on;
+        self.ui.view(cx, ids!(ht_auto_view)).set_visible(cx, !on);
+        self.ui.view(cx, ids!(ht_manual_view)).set_visible(cx, on);
+        if on {
+            self.isolate_buds();
+            self.push_log(cx, "manual hearing test mode on".into());
+        } else {
+            if !self.test_running() {
+                self.restore_buds(cx);
+            }
+            self.push_log(cx, "manual hearing test mode off".into());
+        }
+        self.ui.redraw(cx);
+    }
+
+    /// Audiogram from the 16 manual sliders, clamped to the AirPods' range
+    /// (the sliders go down to -10 dB HL).
+    fn manual_audiogram(&self, cx: &mut Cx) -> Audiogram {
+        let mut ag = Audiogram::default();
+        for band in 0..8 {
+            let l = self.ui.slider(cx, manual_left_ids()[band]).value().unwrap_or(0.0) as f32;
+            let r = self.ui.slider(cx, manual_right_ids()[band]).value().unwrap_or(0.0) as f32;
+            ag.left[band] = l.clamp(DB_HL_MIN, DB_HL_MAX);
+            ag.right[band] = r.clamp(DB_HL_MIN, DB_HL_MAX);
+        }
+        ag
+    }
+
+    /// Put `ag` into the Audiogram tab's fields (marked unsaved, so the
+    /// next device snapshot does not overwrite them) and switch to that tab.
+    fn show_audiogram_in_tab(&mut self, cx: &mut Cx, ag: &Audiogram, status: &str) {
+        self.audiogram_to_ui(cx, ag);
+        self.audiogram_dirty = true;
+        self.ui.label(cx, ids!(ag_status_label)).set_text(cx, status);
+        // `set_active` does not deselect the sibling tabs.
+        for id in [ids!(tab_status), ids!(tab_hearing), ids!(tab_test), ids!(tab_audiogram), ids!(tab_adjust)] {
+            self.ui.radio_button(cx, id).set_active(cx, id == ids!(tab_audiogram), Animate::No);
+        }
+        self.ui.page_flip(cx, ids!(pages)).set_active_page(cx, live_id!(page_audiogram));
+        self.ui.redraw(cx);
+    }
+
+    /// Manual-mode slider events: hold to play that band in that ear,
+    /// release to stop.
+    fn handle_manual_sliders(&mut self, cx: &mut Cx, actions: &Actions) {
+        let offset = self.test_offset_db(cx);
+        for (ear, ids) in [(Ear::Left, manual_left_ids()), (Ear::Right, manual_right_ids())] {
+            for (band, id) in ids.iter().enumerate() {
+                let slider = self.ui.slider(cx, id);
+                let freq = BANDS_HZ[band] as f32;
+                match actions.find_widget_action(slider.widget_uid()).cast::<SliderAction>() {
+                    SliderAction::StartSlide if self.manual_mode => {
+                        let db_hl = slider.value().unwrap_or(0.0) as f32;
+                        self.tone.play_looping(freq, db_hl_to_amp(band, db_hl, offset), ear);
+                        self.manual_playing = Some((ear, band));
+                    }
+                    SliderAction::Slide(v) if self.manual_playing == Some((ear, band)) => {
+                        self.tone.set_amp(db_hl_to_amp(band, v as f32, offset));
+                    }
+                    SliderAction::EndSlide(_) => {
+                        self.tone.stop();
+                        self.manual_playing = None;
+                    }
+                    SliderAction::TextSlide(v) if self.manual_mode => {
+                        // Typed value: one burst so it can be checked.
+                        self.tone.play(freq, db_hl_to_amp(band, v as f32, offset), ear);
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     fn update_test_ui(&mut self, cx: &mut Cx) {
@@ -792,6 +953,7 @@ impl App {
         self.ui.button(cx, ids!(ht_start_btn)).set_enabled(cx, !running);
         self.ui.button(cx, ids!(ht_sample_btn)).set_enabled(cx, !running);
         self.ui.button(cx, ids!(ht_use_btn)).set_enabled(cx, self.test_result.is_some());
+        self.ui.check_box(cx, ids!(ht_manual_toggle)).set_disabled(cx, running);
         self.ui.redraw(cx);
     }
 
@@ -914,7 +1076,7 @@ impl App {
         self.ui.label(cx, ids!(adj_hint_label)).set_text(cx, adj_hint);
 
         let buds_text = if connected {
-            "During the test the AirPods are switched to Noise Cancellation and Hearing Health is turned off, so the existing profile does not colour the tones. Both are restored when the test ends."
+            "During the test, and while manual mode is on, the AirPods are switched to Noise Cancellation and Hearing Health is turned off, so the existing profile does not colour the tones. Both are restored afterwards."
         } else {
             "AirPods not connected: the test still plays through the current audio output, but nothing is switched on the buds."
         };
@@ -1004,6 +1166,9 @@ impl MatchEvent for App {
         if ids.is_empty() && self.test_running() {
             self.end_test(cx);
             self.push_log(cx, "hearing test stopped: audio output lost".into());
+        } else if ids.is_empty() && self.manual_playing.is_some() {
+            self.tone.stop();
+            self.manual_playing = None;
         }
         self.ui.redraw(cx);
     }
@@ -1176,20 +1341,16 @@ impl MatchEvent for App {
         }
         if self.ui.button(cx, ids!(ht_use_btn)).clicked(actions) {
             if let Some((ag, _)) = self.test_result.clone() {
-                self.audiogram_to_ui(cx, &ag);
-                // Keep the fields until the user applies them; the next
-                // device snapshot must not overwrite them.
-                self.audiogram_dirty = true;
-                self.ui
-                    .label(cx, ids!(ag_status_label))
-                    .set_text(cx, "Filled from the hearing test (approximate). Review, then press Apply to AirPods.");
-                // `set_active` does not deselect the sibling tabs.
-                for id in [ids!(tab_status), ids!(tab_hearing), ids!(tab_test), ids!(tab_audiogram), ids!(tab_adjust)] {
-                    self.ui.radio_button(cx, id).set_active(cx, id == ids!(tab_audiogram), Animate::No);
-                }
-                self.ui.page_flip(cx, ids!(pages)).set_active_page(cx, live_id!(page_audiogram));
-                self.ui.redraw(cx);
+                self.show_audiogram_in_tab(cx, &ag, "Filled from the hearing test (approximate). Review, then press Apply to AirPods.");
             }
+        }
+        if let Some(on) = self.ui.check_box(cx, ids!(ht_manual_toggle)).changed(actions) {
+            self.set_manual_mode(cx, on);
+        }
+        self.handle_manual_sliders(cx, actions);
+        if self.ui.button(cx, ids!(ht_manual_use_btn)).clicked(actions) && self.manual_mode {
+            let ag = self.manual_audiogram(cx);
+            self.show_audiogram_in_tab(cx, &ag, "Filled from the manual hearing test (approximate). Review, then press Apply to AirPods.");
         }
 
         // ---- adjustments page ----

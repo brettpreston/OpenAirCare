@@ -80,6 +80,8 @@ pub struct ToneCmd {
     pub ear: Ear,
     /// Bumped by every `play`; the synth restarts the burst when it changes.
     pub serial: u64,
+    /// Repeat the 3-beep burst until `stop` (manual mode).
+    pub looping: bool,
 }
 
 /// UI-side handle, cloned into the audio callback.
@@ -89,11 +91,30 @@ pub struct ToneShared(Arc<Mutex<ToneCmd>>);
 impl ToneShared {
     /// Start a new burst. `amp` is a linear amplitude (see [`db_hl_to_amp`]).
     pub fn play(&self, freq_hz: f32, amp: f32, ear: Ear) {
+        self.start(freq_hz, amp, ear, false);
+    }
+
+    /// Start a burst that repeats until [`stop`](Self::stop); the level can
+    /// be changed on the fly with [`set_amp`](Self::set_amp).
+    pub fn play_looping(&self, freq_hz: f32, amp: f32, ear: Ear) {
+        self.start(freq_hz, amp, ear, true);
+    }
+
+    fn start(&self, freq_hz: f32, amp: f32, ear: Ear, looping: bool) {
         if let Ok(mut c) = self.0.lock() {
             c.serial = c.serial.wrapping_add(1);
             c.freq_hz = freq_hz;
             c.amp = amp.clamp(0.0, MAX_TONE_AMP);
             c.ear = ear;
+            c.looping = looping;
+        }
+    }
+
+    /// Change the level of the current tone without restarting the beep
+    /// pattern (the synth smooths the step).
+    pub fn set_amp(&self, amp: f32) {
+        if let Ok(mut c) = self.0.lock() {
+            c.amp = amp.clamp(0.0, MAX_TONE_AMP);
         }
     }
 
@@ -123,6 +144,9 @@ impl ToneSynth {
             self.burst_pos = 0;
         }
         let sr = sample_rate.max(1.0);
+        // Loop in whole samples: `burst_pos` grows without bound and an f32
+        // modulo would lose precision after a few minutes.
+        let burst_len = ((BURST_SECS * sr) as u64).max(1);
         // ~5 ms one-pole smoothing on the gain target.
         let coef = 1.0 - (-1.0 / (0.005 * sr)).exp();
         let step = TAU * cmd.freq_hz / sr;
@@ -132,7 +156,8 @@ impl ToneSynth {
             Ear::Both => (true, true),
         };
         for i in 0..left.len().min(right.len()) {
-            let target = cmd.amp * envelope(self.burst_pos as f32 / sr);
+            let pos = if cmd.looping { self.burst_pos % burst_len } else { self.burst_pos };
+            let target = cmd.amp * envelope(pos as f32 / sr);
             self.gain += (target - self.gain) * coef;
             let s = self.phase.sin() * self.gain;
             left[i] = if to_l { s } else { 0.0 };
@@ -216,7 +241,7 @@ mod tests {
     #[test]
     fn left_only_leaves_right_silent() {
         let mut s = ToneSynth::default();
-        let cmd = ToneCmd { freq_hz: 1000.0, amp: 0.3, ear: Ear::Left, serial: 1 };
+        let cmd = ToneCmd { freq_hz: 1000.0, amp: 0.3, ear: Ear::Left, serial: 1, looping: false };
         let mut l = vec![0.0; 4800];
         let mut r = vec![0.0; 4800];
         s.render(&cmd, 48000.0, &mut l, &mut r);
@@ -226,9 +251,60 @@ mod tests {
     }
 
     #[test]
+    fn looping_repeats_the_burst() {
+        let n = (2.0 * BURST_SECS * 48000.0) as usize;
+        let probe = ((BURST_SECS + BEEP_ON_SECS / 2.0) * 48000.0) as usize;
+        for looping in [true, false] {
+            let mut s = ToneSynth::default();
+            let cmd = ToneCmd { freq_hz: 1000.0, amp: 0.3, ear: Ear::Both, serial: 1, looping };
+            let mut l = vec![0.0; n];
+            let mut r = vec![0.0; n];
+            s.render(&cmd, 48000.0, &mut l, &mut r);
+            let peak = l[probe - 200..probe + 200].iter().fold(0f32, |m, v| m.max(v.abs()));
+            if looping {
+                assert!(peak > 0.25, "looping burst should be audible in its second repeat, peak {peak}");
+            } else {
+                assert!(peak < 1e-3, "one-shot burst should be over, peak {peak}");
+            }
+        }
+    }
+
+    #[test]
+    fn amp_change_keeps_burst_position() {
+        let mut s = ToneSynth::default();
+        let mut cmd = ToneCmd { freq_hz: 1000.0, amp: 0.3, ear: Ear::Both, serial: 1, looping: true };
+        let mut l = vec![0.0; 4800];
+        let mut r = vec![0.0; 4800];
+        s.render(&cmd, 48000.0, &mut l, &mut r);
+        cmd.amp = 0.1;
+        let mut l2 = vec![0.0; 480];
+        let mut r2 = vec![0.0; 480];
+        s.render(&cmd, 48000.0, &mut l2, &mut r2);
+        assert_eq!(s.burst_pos, 4800 + 480);
+        // 100 ms in we are inside the first beep; a restart would re-enter
+        // the 20 ms zero ramp.
+        let peak = l2.iter().fold(0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.05 && peak <= 0.3 + 1e-4, "peak {peak}");
+    }
+
+    #[test]
+    fn set_amp_does_not_restart() {
+        let t = ToneShared::default();
+        t.play_looping(1000.0, 0.2, Ear::Left);
+        let serial = t.0.lock().unwrap().serial;
+        t.set_amp(0.4);
+        let c = t.0.lock().unwrap().clone();
+        assert_eq!(c.serial, serial);
+        assert!((c.amp - 0.4).abs() < 1e-6);
+        assert!(c.looping);
+        t.play(500.0, 0.1, Ear::Both);
+        assert!(!t.0.lock().unwrap().looping, "play must clear looping");
+    }
+
+    #[test]
     fn stop_fades_to_silence() {
         let mut s = ToneSynth::default();
-        let mut cmd = ToneCmd { freq_hz: 1000.0, amp: 0.3, ear: Ear::Both, serial: 1 };
+        let mut cmd = ToneCmd { freq_hz: 1000.0, amp: 0.3, ear: Ear::Both, serial: 1, looping: false };
         let mut l = vec![0.0; 4800];
         let mut r = vec![0.0; 4800];
         s.render(&cmd, 48000.0, &mut l, &mut r);

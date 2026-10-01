@@ -56,6 +56,14 @@ It is a screening aid, not a clinical test:
   hard-capped at about -6 dBFS whatever the offset. Remove the earbuds at once
   if anything is uncomfortably loud.
 
+**Manual mode** (toggle on the same tab) is a quicker alternative: one slider
+per band and ear (-10 to 80 dB HL in 5 dB steps, starting at 0). Hold a slider
+and that band's beeps repeat in that ear, getting louder as you move right;
+leave it where the beeps are only just audible, then press *Use in Audiogram
+tab*. The level estimate, the offset slider and the caps are the same as for
+the automatic test, and the earbuds are switched to Noise Cancellation with
+Hearing Health off while the manual page is shown.
+
 ## Safety limits
 
 - On first launch the app shows the medical/safety disclaimer above and stays
